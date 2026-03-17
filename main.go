@@ -27,19 +27,18 @@ type User struct {
 }
 
 type Dashboard struct {
-	Username     string         `json:"username"`
-	Repos        int            `json:"repos"`
-	Followers    int            `json:"followers"`
-	TopLanguages map[string]int `json:"top_languages"`
-	TopRepos     []Repo         `json:"top_repos"`
-	Avatar       string         `json:"avatar"`
-	Bio          string         `json:"bio"`
+	Username     string             `json:"username"`
+	Repos        int                `json:"repos"`
+	Followers    int                `json:"followers"`
+	TopLanguages map[string]float32 `json:"top_languages"`
+	TopRepos     []Repo             `json:"top_repos"`
+	Avatar       string             `json:"avatar"`
+	Bio          string             `json:"bio"`
 }
 
 var err error
 
 func getDashboard(c *fiber.Ctx) error {
-
 	// Get user
 	userResp, err := http.Get("https://api.github.com/users/" + username)
 	if err != nil {
@@ -63,9 +62,25 @@ func getDashboard(c *fiber.Ctx) error {
 	// Count languages
 	languages := map[string]int{}
 
+	client := &http.Client{}
+	totalBytes := 0
+
 	for _, repo := range repos {
-		if repo.Language != "" {
-			languages[repo.Language]++
+
+		url := "https://api.github.com/repos/" + username + "/" + repo.Name + "/languages"
+		req, _ := http.NewRequest("GET", url, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		var repoLangs map[string]int
+		json.NewDecoder(resp.Body).Decode(&repoLangs)
+		resp.Body.Close()
+
+		for lang, bytes := range repoLangs {
+			languages[lang] += bytes
+			totalBytes += bytes
 		}
 	}
 
@@ -79,11 +94,26 @@ func getDashboard(c *fiber.Ctx) error {
 		topRepos = topRepos[:5]
 	}
 
+	// Find the max bytes used in a language
+	max := 0
+	for _, b := range languages {
+		if b > max {
+			max = b
+		}
+	}
+
+	// Normalize so the top language is 100
+	normalized := map[string]float32{}
+	for lang, b := range languages {
+		normalized[lang] = float32(b) / float32(totalBytes) * 100
+	}
+
+	// Replace TopLanguages with normalized
 	dashboard := Dashboard{
 		Username:     user.Login,
 		Repos:        user.PublicRepos,
 		Followers:    user.Followers,
-		TopLanguages: languages,
+		TopLanguages: normalized,
 		TopRepos:     topRepos,
 		Avatar:       user.Avatar,
 		Bio:          user.Bio,
