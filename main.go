@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -37,10 +38,19 @@ type Dashboard struct {
 }
 
 var err error
+var cachedDashboard Dashboard
+var lastFetch int64 = 0
 
 func getDashboard(c *fiber.Ctx) error {
+	now := time.Now().Unix()
+
+	// Cache for 5 minutes
+	if now-lastFetch < 300 && cachedDashboard.Username != "" {
+		return c.JSON(cachedDashboard)
+	}
+
 	// Get user
-	userResp, err := http.Get("https://api.github.com/users/" + username)
+	userResp, err := githubRequest("https://api.github.com/users/" + username)
 	if err != nil {
 		return err
 	}
@@ -50,7 +60,7 @@ func getDashboard(c *fiber.Ctx) error {
 	json.NewDecoder(userResp.Body).Decode(&user)
 
 	// Get repos
-	repoResp, err := http.Get("https://api.github.com/users/" + username + "/repos")
+	repoResp, err := githubRequest("https://api.github.com/users/" + username + "/repos?per_page=100")
 	if err != nil {
 		return err
 	}
@@ -62,14 +72,12 @@ func getDashboard(c *fiber.Ctx) error {
 	// Count languages
 	languages := map[string]int{}
 
-	client := &http.Client{}
 	totalBytes := 0
 
 	for _, repo := range repos {
 
 		url := "https://api.github.com/repos/" + username + "/" + repo.Name + "/languages"
-		req, _ := http.NewRequest("GET", url, nil)
-		resp, err := client.Do(req)
+		resp, err := githubRequest(url)
 		if err != nil {
 			continue
 		}
@@ -119,7 +127,26 @@ func getDashboard(c *fiber.Ctx) error {
 		Bio:          user.Bio,
 	}
 
+	cachedDashboard = dashboard
+	lastFetch = now
+
 	return c.JSON(dashboard)
+}
+
+func githubRequest(url string) (*http.Response, error) {
+	token := os.Getenv("RYAN_GITHUB_API_TOKEN")
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+
+	client := &http.Client{}
+	return client.Do(req)
 }
 
 func main() {
