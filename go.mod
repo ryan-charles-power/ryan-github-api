@@ -1,6 +1,6 @@
 module ryan-github-api
 
-go 1.26.1
+go 1.26.0
 
 require github.com/gofiber/fiber/v2 v2.52.12
 
