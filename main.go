@@ -22,27 +22,39 @@ type User struct {
 	Login       string `json:"login"`
 	PublicRepos int    `json:"public_repos"`
 	Followers   int    `json:"followers"`
+	Avatar      string `json:"avatar_url"`
+	Bio         string `json:"bio"`
 }
 
 type Dashboard struct {
-	Username     string            `json:"username"`
-	Repos        int               `json:"repos"`
-	Followers    int               `json:"followers"`
-	TopLanguages map[string]int    `json:"top_languages"`
-	TopRepos     []Repo            `json:"top_repos"`
+	Username     string         `json:"username"`
+	Repos        int            `json:"repos"`
+	Followers    int            `json:"followers"`
+	TopLanguages map[string]int `json:"top_languages"`
+	TopRepos     []Repo         `json:"top_repos"`
+	Avatar       string         `json:"avatar"`
+	Bio          string         `json:"bio"`
 }
+
+var err error
 
 func getDashboard(c *fiber.Ctx) error {
 
 	// Get user
-	userResp, _ := http.Get("https://api.github.com/users/" + username)
+	userResp, err := http.Get("https://api.github.com/users/" + username)
+	if err != nil {
+		return err
+	}
 	defer userResp.Body.Close()
 
 	var user User
 	json.NewDecoder(userResp.Body).Decode(&user)
 
 	// Get repos
-	repoResp, _ := http.Get("https://api.github.com/users/" + username + "/repos")
+	repoResp, err := http.Get("https://api.github.com/users/" + username + "/repos")
+	if err != nil {
+		return err
+	}
 	defer repoResp.Body.Close()
 
 	var repos []Repo
@@ -73,15 +85,15 @@ func getDashboard(c *fiber.Ctx) error {
 		Followers:    user.Followers,
 		TopLanguages: languages,
 		TopRepos:     topRepos,
+		Avatar:       user.Avatar,
+		Bio:          user.Bio,
 	}
 
 	return c.JSON(dashboard)
 }
 
 func main() {
-
 	app := fiber.New()
-
 	app.Use(cors.New())
 
 	app.Get("/api/github/dashboard", getDashboard)
