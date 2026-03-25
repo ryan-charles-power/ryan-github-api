@@ -17,6 +17,7 @@ type Repo struct {
 	Name     string `json:"name"`
 	Language string `json:"language"`
 	Stars    int    `json:"stargazers_count"`
+	Size     int    `json:"size"`
 }
 
 type User struct {
@@ -74,7 +75,11 @@ func getDashboard(c *fiber.Ctx) error {
 
 	totalBytes := 0
 
-	for _, repo := range repos {
+	for i, repo := range repos {
+
+		if i > 10 {
+			break // Don't list more than 10 repos
+		}
 
 		url := "https://api.github.com/repos/" + username + "/" + repo.Name + "/languages"
 		resp, err := githubRequest(url)
@@ -86,15 +91,20 @@ func getDashboard(c *fiber.Ctx) error {
 		json.NewDecoder(resp.Body).Decode(&repoLangs)
 		resp.Body.Close()
 
+		repoTotal := 0
+
 		for lang, bytes := range repoLangs {
 			languages[lang] += bytes
 			totalBytes += bytes
+			repoTotal += bytes // ✅ accumulate per repo
 		}
+
+		repos[i].Size = repoTotal // ✅ assign to struct
 	}
 
-	// Sort repos by stars
+	// Sort repos by size
 	sort.Slice(repos, func(i, j int) bool {
-		return repos[i].Stars > repos[j].Stars
+		return repos[i].Size > repos[j].Size
 	})
 
 	topRepos := repos
